@@ -1,0 +1,127 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String   @id @default(uuid()) @db.Uuid
+  name     String   @db.VarChar(100)
+  email    String   @unique @db.VarChar(100)
+  password String   @db.VarChar(100)
+  role     String   @db.VarChar(50)
+
+  stockMovementsCreated StockMovement[] @relation("CreatedByUser")
+  orders                Order[]         @relation("CustomerOrders")
+  reservations          Reservation[]   @relation("CustomerReservations")
+  activityLogs ActivityLog[] // relasi balik, nama bebas
+}
+
+model MenuItem {
+  id       String      @id @default(uuid()) @db.Uuid
+  name     String      @db.VarChar(100)
+  price    Float
+  category String      @db.VarChar(50)
+  imageUrl String?     @db.VarChar(255)
+
+  orderItems OrderItem[]
+}
+
+model InventoryItem {
+  id            String         @id @default(uuid()) @db.Uuid
+  name          String         @db.VarChar(100)
+  category      String         @db.VarChar(50)
+  unit          String         @db.VarChar(20)
+  current_stock Float
+  minimum_stock Float
+  maximum_stock Float
+  unit_cost     Float
+  supplier      String         @db.VarChar(100)
+  last_updated  DateTime
+
+  stockMovements StockMovement[]
+}
+
+model StockMovement {
+  id         String   @id @default(uuid()) @db.Uuid
+  item_id    String   @db.Uuid
+  type       String   @db.VarChar(50)
+  quantity   Float
+  reason     String   @db.VarChar(100)
+  reference  String   @db.VarChar(100)
+  created_by String?  @db.Uuid
+
+  item       InventoryItem @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  createdBy  User?         @relation("CreatedByUser", fields: [created_by], references: [id], onDelete: SetNull)
+}
+
+model Order {
+  id           String      @id @default(uuid()) @db.Uuid
+  order_number String      @db.VarChar(50)
+  customer_id  String?     @db.Uuid
+  table_id     String?     @db.Uuid   // ← FK ke Table, null jika takeaway/online
+  status       String      @db.VarChar(50)
+  paymentStatus String     @db.VarChar(50)
+  paymentMethod String?    @db.VarChar(50)
+  customer     User?       @relation("CustomerOrders", fields: [customer_id], references: [id], onDelete: SetNull)
+  table        Table?      @relation(fields: [table_id], references: [id], onDelete: SetNull)
+  created_at    DateTime    @default(now())
+  orderItems   OrderItem[]
+}
+
+
+
+model OrderItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  order_id     String   @db.Uuid
+  menu_item_id String?  @db.Uuid
+  quantity     Int
+
+  order     Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  menuItem  MenuItem? @relation(fields: [menu_item_id], references: [id], onDelete: SetNull)
+}
+
+model Reservation {
+  id              String   @id @default(uuid()) @db.Uuid
+  customer_id     String?  @db.Uuid
+  table_id        String?  @db.Uuid        // ← FK ke Table
+  guest_count     Int
+  status          String   @db.VarChar(50)
+  reservation_date DateTime
+  reservation_time String
+  customer        User?    @relation("CustomerReservations", fields: [customer_id], references: [id], onDelete: SetNull)
+  table           Table?   @relation(fields: [table_id], references: [id], onDelete: SetNull)
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  user_id   String?  @db.Uuid
+  action    String   @db.VarChar(50)    // ex: 'create', 'update', 'delete'
+  target    String   @db.VarChar(50)    // ex: 'MenuItem', 'Order', 'User'
+  target_id String?  @db.VarChar(100)   // ex: id data yg diubah
+  message   String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+}
+
+model Table {
+  id        String        @id @default(uuid()) @db.Uuid
+  number    Int           // Nomor meja
+  capacity  Int           // Kapasitas kursi per meja
+  status    String        @default("Tersedia") // Tersedia, Terisi, dsb
+
+  // Relasi ke Order & Reservation (opposite)
+  orders        Order[]         // Meja ini dipakai di order mana saja
+  reservations  Reservation[]   // Meja ini dipakai di reservasi mana saja
+}
+
