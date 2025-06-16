@@ -16,10 +16,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
-import OrderSummary from "@/components/ui/orderSummary"; // Pastikan file ini ada
-import PaymentMethod from "@/components/ui/paymentMethod"; // Pastikan file ini ada
+import OrderSummary from "@/components/ui/orderSummary";
+import PaymentMethod from "@/components/ui/paymentMethod";
 
-import { ArrowLeft, CheckCircle, Receipt } from "lucide-react";
+import { ArrowLeft, CheckCircle, Receipt, AlertTriangle } from "lucide-react";
 
 // Fungsi hitung total harga
 function calculateOrderTotal(items) {
@@ -44,6 +44,54 @@ export default function PaymentPage() {
   const [tableId, setTableId] = useState("");
   const [tables, setTables] = useState([]);
   const [error, setError] = useState("");
+  const [stockValidation, setStockValidation] = useState({
+    isValid: true,
+    message: "",
+  });
+
+  // Fungsi untuk validasi stock sebelum checkout
+  const validateStock = async (items) => {
+    try {
+      const stockChecks = await Promise.all(
+        items.map(async (item) => {
+          const response = await fetch(`/api/menu/${item.id}`);
+          if (!response.ok)
+            throw new Error(`Gagal mengecek stock untuk ${item.name}`);
+          const menuData = await response.json();
+          return {
+            id: item.id,
+            name: item.name,
+            requestedQty: item.quantity,
+            availableStock: menuData.stock,
+            isValid: menuData.stock >= item.quantity,
+          };
+        })
+      );
+
+      const invalidItems = stockChecks.filter((check) => !check.isValid);
+
+      if (invalidItems.length > 0) {
+        const errorMessage = invalidItems
+          .map(
+            (item) =>
+              `${item.name}: diminta ${item.requestedQty}, tersedia ${item.availableStock}`
+          )
+          .join(", ");
+
+        return {
+          isValid: false,
+          message: `Stock tidak mencukupi untuk: ${errorMessage}`,
+        };
+      }
+
+      return { isValid: true, message: "" };
+    } catch (error) {
+      return {
+        isValid: false,
+        message: "Gagal memvalidasi stock. Silakan coba lagi.",
+      };
+    }
+  };
 
   // Ambil user, order, dan daftar meja dari localStorage dan API
   useEffect(() => {
@@ -57,6 +105,11 @@ export default function PaymentPage() {
         const order = JSON.parse(stored);
         setOrderDetails(order);
         setTableId(order.table?.id || "");
+
+        // Validasi stock saat component dimuat
+        validateStock(order.items).then((validation) => {
+          setStockValidation(validation);
+        });
       }
 
       // Fetch data meja dari API
@@ -74,6 +127,13 @@ export default function PaymentPage() {
     }
   }, []);
 
+  // Re-validasi stock sebelum submit pembayaran
+  const revalidateStock = async () => {
+    const validation = await validateStock(orderDetails.items);
+    setStockValidation(validation);
+    return validation.isValid;
+  };
+
   if (!orderDetails || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -87,7 +147,16 @@ export default function PaymentPage() {
     e.preventDefault();
     setIsProcessing(true);
     setError("");
+
     try {
+      // Validasi stock terlebih dahulu
+      const isStockValid = await revalidateStock();
+      if (!isStockValid) {
+        setError(stockValidation.message);
+        setIsProcessing(false);
+        return;
+      }
+
       const total = calculateOrderTotal(orderDetails.items);
       const isCash = paymentMethod === "cash";
       const paymentStatus = isCash ? "pending" : "success";
@@ -99,6 +168,7 @@ export default function PaymentPage() {
           customer_id: user.id,
           status: "pending",
           paymentStatus,
+          paymentMethod,
           items: orderDetails.items.map((item) => ({
             menu_item_id: item.id,
             quantity: item.quantity,
@@ -108,20 +178,36 @@ export default function PaymentPage() {
         }),
       });
 
+      const responseData = await res.json();
+
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Gagal melakukan pembayaran.");
+        throw new Error(responseData.error || "Gagal melakukan pembayaran.");
       }
 
+      // Jika berhasil, tampilkan success dialog
       setShowSuccess(true);
+
+      // Hapus currentOrder dari localStorage
       localStorage.removeItem("currentOrder");
+
+      // Reset stock validation
+      setStockValidation({ isValid: true, message: "" });
     } catch (err) {
+      console.error("Payment error:", err);
       setError(err.message || "Gagal melakukan pembayaran.");
+
+      // Re-validasi stock jika terjadi error untuk update status
+      await revalidateStock();
     }
     setIsProcessing(false);
   };
 
   const handleBackToMenu = () => {
+    router.push("/customer/dashboard");
+  };
+
+  const handleUpdateOrder = () => {
+    // Kembali ke menu untuk update pesanan
     router.push("/customer/dashboard");
   };
 
@@ -143,7 +229,33 @@ export default function PaymentPage() {
           </div>
         </div>
       </header>
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Alert untuk validasi stock */}
+        {!stockValidation.isValid && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-medium text-yellow-800">
+                  Peringatan Stock
+                </h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  {stockValidation.message}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={handleUpdateOrder}
+                >
+                  Update Pesanan
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <Card>
@@ -195,6 +307,7 @@ export default function PaymentPage() {
               setCardDetails={setCardDetails}
               isProcessing={isProcessing}
               handlePaymentSubmit={handlePaymentSubmit}
+              disabled={!stockValidation.isValid} // Disable payment jika stock tidak valid
             />
           </div>
         </div>
@@ -211,7 +324,7 @@ export default function PaymentPage() {
             <DialogDescription>
               Pembayaran untuk pesanan{" "}
               {orderDetails.id || orderDetails.order_number} telah berhasil
-              diproses
+              diproses dan stock menu telah diperbarui.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-green-50 p-4 rounded-lg">

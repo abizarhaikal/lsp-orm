@@ -32,6 +32,7 @@ model MenuItem {
   price    Float
   category String      @db.VarChar(50)
   imageUrl String?     @db.VarChar(255)
+  stock Int?        // Jumlah stok, bisa null jika tidak ada stok
 
   orderItems OrderItem[]
 }

@@ -33,6 +33,7 @@ export default function CashierDashboard() {
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState([]);
 
   useEffect(() => {
     // Pastikan user role kasir, redirect jika bukan
@@ -42,6 +43,7 @@ export default function CashierDashboard() {
       return;
     }
     const user = JSON.parse(userStr);
+    setUsers([user]); // Simpan user ke state
     if (user.role !== "kasir") {
       window.location.href = "/login";
       return;
@@ -69,12 +71,18 @@ export default function CashierDashboard() {
           subtotal:
             o.subtotal ??
             (o.items
-              ? o.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+              ? o.items.reduce(
+                  (sum, item) => sum + item.price * item.quantity,
+                  0
+                )
               : o.total ?? 0),
           total:
             o.total ??
             (o.items
-              ? o.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+              ? o.items.reduce(
+                  (sum, item) => sum + item.price * item.quantity,
+                  0
+                )
               : o.subtotal ?? 0),
           paymentStatus: o.paymentStatus || "pending", // default jika kosong
         }));
@@ -121,6 +129,7 @@ export default function CashierDashboard() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          userId: users[0]?.id, // Ambil user ID dari state
           paymentStatus: "success",
         }),
       });
@@ -160,7 +169,9 @@ export default function CashierDashboard() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center gap-3">
               <CreditCard className="h-8 w-8 text-green-500" />
-              <h1 className="text-2xl font-bold text-gray-900">Kasir Dashboard</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Kasir Dashboard
+              </h1>
             </div>
             <div className="flex items-center gap-4">
               <Badge variant="secondary" className="flex items-center gap-1">
@@ -190,7 +201,9 @@ export default function CashierDashboard() {
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   Pesanan Siap Bayar ({readyOrders.length})
                 </CardTitle>
-                <CardDescription>Pesanan yang siap untuk pembayaran</CardDescription>
+                <CardDescription>
+                  Pesanan yang siap untuk pembayaran
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {readyOrders.length === 0 && (
@@ -199,12 +212,19 @@ export default function CashierDashboard() {
                   </p>
                 )}
                 {readyOrders.map((order) => (
-                  <Card key={order.id} className="border-l-4 border-l-green-500">
+                  <Card
+                    key={order.id}
+                    className="border-l-4 border-l-green-500"
+                  >
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h3 className="font-semibold">{order.order_number || order.id}</h3>
-                          <p className="text-sm text-gray-600">Meja {order.table}</p>
+                          <h3 className="font-semibold">
+                            {order.order_number || order.id}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Meja {order.table}
+                          </p>
                           {order.orderTime && (
                             <p className="text-sm text-gray-600 flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -218,12 +238,18 @@ export default function CashierDashboard() {
                       </div>
                       <div className="space-y-2 mb-4">
                         {(order.items || []).map((item, index) => (
-                          <div key={index} className="flex justify-between text-sm">
+                          <div
+                            key={index}
+                            className="flex justify-between text-sm"
+                          >
                             <span>
                               {item.quantity}x {item.menu_name || item.name}
                             </span>
                             <span>
-                              Rp {(item.price * item.quantity).toLocaleString("id-ID")}
+                              Rp{" "}
+                              {(item.price * item.quantity).toLocaleString(
+                                "id-ID"
+                              )}
                             </span>
                           </div>
                         ))}
@@ -249,35 +275,54 @@ export default function CashierDashboard() {
                           <DialogContent className="max-w-md">
                             <DialogHeader>
                               <DialogTitle>
-                                Pembayaran - {selectedOrder?.order_number || selectedOrder?.id}
+                                Pembayaran -{" "}
+                                {selectedOrder?.order_number ||
+                                  selectedOrder?.id}
                               </DialogTitle>
-                              <DialogDescription>Proses pembayaran pesanan</DialogDescription>
+                              <DialogDescription>
+                                Proses pembayaran pesanan
+                              </DialogDescription>
                             </DialogHeader>
                             {selectedOrder && (
                               <div className="space-y-4">
                                 <div className="space-y-2">
-                                  <h4 className="font-medium">Detail Pesanan:</h4>
-                                  {(selectedOrder.items || []).map((item, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex justify-between text-sm"
-                                    >
-                                      <span>
-                                        {item.quantity}x {item.menu_name || item.name}
-                                      </span>
-                                      <span>
-                                        Rp {(item.price * item.quantity).toLocaleString("id-ID")}
-                                      </span>
-                                    </div>
-                                  ))}
+                                  <h4 className="font-medium">
+                                    Detail Pesanan:
+                                  </h4>
+                                  {(selectedOrder.items || []).map(
+                                    (item, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="flex justify-between text-sm"
+                                      >
+                                        <span>
+                                          {item.quantity}x{" "}
+                                          {item.menu_name || item.name}
+                                        </span>
+                                        <span>
+                                          Rp{" "}
+                                          {(
+                                            item.price * item.quantity
+                                          ).toLocaleString("id-ID")}
+                                        </span>
+                                      </div>
+                                    )
+                                  )}
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between">
                                   <span>Total:</span>
-                                  <span>Rp {selectedOrder.subtotal?.toLocaleString("id-ID")}</span>
+                                  <span>
+                                    Rp{" "}
+                                    {selectedOrder.subtotal?.toLocaleString(
+                                      "id-ID"
+                                    )}
+                                  </span>
                                 </div>
                                 <div className="flex justify-between mt-2">
-                                  <span className="font-medium">Metode Pembayaran:</span>
+                                  <span className="font-medium">
+                                    Metode Pembayaran:
+                                  </span>
                                   <span className="text-gray-800 capitalize">
                                     {selectedOrder.paymentMethod
                                       ? selectedOrder.paymentMethod
@@ -285,7 +330,9 @@ export default function CashierDashboard() {
                                   </span>
                                 </div>
                                 <Button
-                                  onClick={() => processPayment(selectedOrder.id)}
+                                  onClick={() =>
+                                    processPayment(selectedOrder.id)
+                                  }
                                   className="w-full"
                                 >
                                   Proses Pembayaran
@@ -308,7 +355,9 @@ export default function CashierDashboard() {
                   <Receipt className="h-5 w-5 text-blue-500" />
                   Pesanan Sudah Bayar ({paidOrders.length})
                 </CardTitle>
-                <CardDescription>Pesanan yang sudah selesai dibayar</CardDescription>
+                <CardDescription>
+                  Pesanan yang sudah selesai dibayar
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {paidOrders.length === 0 && (
@@ -321,10 +370,16 @@ export default function CashierDashboard() {
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h3 className="font-semibold">{order.order_number || order.id}</h3>
-                          <p className="text-sm text-gray-600">Meja {order.table}</p>
+                          <h3 className="font-semibold">
+                            {order.order_number || order.id}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Meja {order.table}
+                          </p>
                           {order.orderTime && (
-                            <p className="text-sm text-gray-600">{order.orderTime}</p>
+                            <p className="text-sm text-gray-600">
+                              {order.orderTime}
+                            </p>
                           )}
                         </div>
                         <Badge className={getStatusColor(order.paymentStatus)}>

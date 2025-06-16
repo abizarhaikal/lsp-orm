@@ -9,7 +9,18 @@ export const config = {
 };
 
 // Helper untuk ambil user_id (bisa dari session, token, atau header)
-function getUserId(req) {
+function getUserId(req, fields = null) {
+  // Prioritas: dari form data -> dari JSON body -> dari headers
+  if (fields && fields.user_id) {
+    return Array.isArray(fields.user_id) ? fields.user_id[0] : fields.user_id;
+  }
+
+  // Jika request JSON, parse body
+  if (req.body && typeof req.body === "object" && req.body.user_id) {
+    return req.body.user_id;
+  }
+
+  // Fallback ke headers
   return req.headers["x-user-id"] || null;
 }
 
@@ -45,6 +56,9 @@ export default async function handler(req, res) {
       const category = Array.isArray(fields.category)
         ? fields.category[0]
         : fields.category;
+      const stock = Array.isArray(fields.stock)
+        ? fields.stock[0]
+        : fields.stock;
 
       // Validasi gambar
       const image = files.image;
@@ -69,11 +83,12 @@ export default async function handler(req, res) {
             price: Number(price),
             category,
             imageUrl: image_url,
+            stock: Number(stock),
           },
         });
 
         // Insert log aktivitas
-        const userId = getUserId(req);
+        const userId = getUserId(req, fields);
         await prisma.activityLog.create({
           data: {
             user_id: userId,

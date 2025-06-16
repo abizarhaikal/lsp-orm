@@ -37,9 +37,17 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-// Helper status badge (status selalu Tersedia karena stock tidak ada)
-function getStatusColor(status) {
+// Helper status badge berdasarkan stock
+function getStatusColor(stock) {
+  if (stock === 0) return "bg-red-100 text-red-800";
+  if (stock <= 5) return "bg-yellow-100 text-yellow-800";
   return "bg-green-100 text-green-800";
+}
+
+function getStatusText(stock) {
+  if (stock === 0) return "Habis";
+  if (stock <= 5) return "Sedikit";
+  return "Tersedia";
 }
 
 export default function AdminMenu({ menuItems, setMenuItems }) {
@@ -48,11 +56,12 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
     name: "",
     price: "",
     category: "",
-    description: "",
+    stock: "",
   });
   const [file, setFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef();
+  const [user, setUser] = useState(null);
 
   // Untuk edit menu
   const [editingId, setEditingId] = useState(null);
@@ -66,10 +75,19 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
       const res = await fetch("/api/menu");
       const data = await res.json();
       setMenuItems(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (error) {
+      console.error("Error fetching menus:", error);
       setMenuItems([]);
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const u = localStorage.getItem("user");
+      console.log(u); // Menampilkan data raw yang disimpan di localStorage
+      setUser(u ? JSON.parse(u) : null);
+    }
+  }, []);
 
   useEffect(() => {
     fetchMenus();
@@ -77,59 +95,13 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
   }, [setMenuItems]);
 
   // Tambah menu baru
-  const addMenuItem = async (e) => {
-    e.preventDefault();
-    if (
-      !newMenuItem.name ||
-      !newMenuItem.price ||
-      !newMenuItem.category ||
-      !file
-    ) {
-      alert("Semua field & gambar wajib diisi!");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append("name", newMenuItem.name);
-      formData.append("price", newMenuItem.price);
-      formData.append("category", newMenuItem.category);
-      formData.append("description", newMenuItem.description || "");
-      formData.append("image", file);
-
-      const res = await fetch("/api/menu", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (res.ok) {
-        setIsAddMenuOpen(false);
-        setNewMenuItem({
-          name: "",
-          price: "",
-          category: "",
-          description: "",
-        });
-        setFile(null);
-        fileInputRef.current.value = "";
-        fetchMenus();
-      } else {
-        const err = await res.json();
-        alert("Gagal menambah menu: " + (err.error || "Unknown error"));
-      }
-    } catch (e) {
-      alert("Gagal menambah menu");
-    }
-    setIsLoading(false);
-  };
-
   // Mulai edit
   const handleEdit = (item) => {
     setEditingId(item.id);
     setEditData({
       ...item,
       price: item.price ? String(item.price) : "",
-      description: item.description || "",
+      stock: item.stock ? String(item.stock) : "0",
     });
     setEditFile(null);
     setEditImagePreview(
@@ -146,7 +118,13 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
   };
 
   // Simpan edit (mendukung update gambar)
+  // Simpan edit (mendukung update gambar)
   const handleSaveEdit = async () => {
+    if (!editData.name || !editData.price || !editData.category) {
+      alert("Nama, harga, dan kategori wajib diisi!");
+      return;
+    }
+
     setIsLoading(true);
     try {
       let res;
@@ -156,8 +134,12 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
         formData.append("name", editData.name);
         formData.append("price", editData.price);
         formData.append("category", editData.category);
-        formData.append("description", editData.description);
+        formData.append("stock", editData.stock || "0");
         formData.append("image", editFile);
+        // Add user_id to form data
+        if (user?.id) {
+          formData.append("user_id", user.id);
+        }
 
         res = await fetch(`/api/menu/${editingId}`, {
           method: "PUT",
@@ -169,10 +151,11 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            user_id: user?.id || null, // Sudah ada ini
             name: editData.name,
-            price: editData.price,
+            price: parseFloat(editData.price),
             category: editData.category,
-            description: editData.description,
+            stock: parseInt(editData.stock) || 0,
           }),
         });
       }
@@ -186,31 +169,95 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
         setEditData({});
         setEditFile(null);
         setEditImagePreview(null);
+        alert("Menu berhasil diupdate!");
       }
-    } catch {
+    } catch (error) {
+      console.error("Error updating menu:", error);
       alert("Gagal update menu");
-      return res
-        .status(400)
-        .json({ error: "Gagal update menu", detail: e?.message || e });
     }
     setIsLoading(false);
   };
 
+  // Also update addMenuItem function
+  const addMenuItem = async (e) => {
+    e.preventDefault();
+    if (
+      !newMenuItem.name ||
+      !newMenuItem.price ||
+      !newMenuItem.category ||
+      !newMenuItem.stock ||
+      !file
+    ) {
+      alert("Semua field & gambar wajib diisi!");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("name", newMenuItem.name);
+      formData.append("price", newMenuItem.price);
+      formData.append("category", newMenuItem.category);
+      formData.append("stock", newMenuItem.stock);
+      formData.append("image", file);
+      // Add user_id to form data
+      formData.append("user_id", user.id);
+
+      const res = await fetch("/api/menu", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        setIsAddMenuOpen(false);
+        setNewMenuItem({
+          name: "",
+          price: "",
+          category: "",
+          stock: "",
+        });
+        setFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        fetchMenus();
+        console.log(user);
+        alert("Menu berhasil ditambahkan!");
+      } else {
+        const err = await res.json();
+        alert("Gagal menambah menu: " + (err.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("Error adding menu:", error);
+      alert("Gagal menambah menu");
+    }
+    setIsLoading(false);
+  };
   // Hapus menu
   const handleDelete = async (id) => {
+    if (!user?.id) {
+      alert("User ID is required to delete menu.");
+      return;
+    }
     if (!window.confirm("Yakin hapus menu ini?")) return;
     setIsLoading(true);
     try {
       const res = await fetch(`/api/menu/${id}`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          // Tambahkan user_id jika perlu
+          "x-user-id": user.id,
+        },
       });
       if (!res.ok) {
         const err = await res.json();
         alert("Gagal hapus: " + (err.error || "Unknown error"));
       } else {
         fetchMenus();
+        alert("Menu berhasil dihapus!");
       }
-    } catch {
+    } catch (error) {
+      console.error("Error deleting menu:", error);
       alert("Gagal hapus menu");
     }
     setIsLoading(false);
@@ -237,7 +284,9 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
         <div className="flex justify-between items-center">
           <div>
             <CardTitle>Manajemen Menu</CardTitle>
-            <CardDescription>Kelola menu dan harga restoran</CardDescription>
+            <CardDescription>
+              Kelola menu, harga, dan stok restoran
+            </CardDescription>
           </div>
           <Dialog open={isAddMenuOpen} onOpenChange={setIsAddMenuOpen}>
             <DialogTrigger asChild>
@@ -303,6 +352,21 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
                   </Select>
                 </div>
 
+                {/* Input stok */}
+                <div className="space-y-2">
+                  <Label htmlFor="menuStock">Stok</Label>
+                  <Input
+                    id="menuStock"
+                    type="number"
+                    min="0"
+                    placeholder="Masukkan jumlah stok"
+                    value={newMenuItem.stock}
+                    onChange={(e) =>
+                      setNewMenuItem({ ...newMenuItem, stock: e.target.value })
+                    }
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="menuImage">Gambar Menu</Label>
                   <Input
@@ -329,6 +393,7 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
               <TableHead>Nama Menu</TableHead>
               <TableHead>Kategori</TableHead>
               <TableHead>Harga</TableHead>
+              <TableHead>Stok</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Aksi</TableHead>
             </TableRow>
@@ -398,7 +463,26 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
                       />
                     </TableCell>
                     <TableCell>
-                      <Badge className={getStatusColor()}>Tersedia</Badge>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={editData.stock}
+                        onChange={(e) =>
+                          setEditData((data) => ({
+                            ...data,
+                            stock: e.target.value,
+                          }))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={getStatusColor(
+                          parseInt(editData.stock) || 0
+                        )}
+                      >
+                        {getStatusText(parseInt(editData.stock) || 0)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -440,7 +524,12 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
                       Rp {item.price?.toLocaleString("id-ID")}
                     </TableCell>
                     <TableCell>
-                      <Badge className={getStatusColor()}>Tersedia</Badge>
+                      <span className="font-medium">{item.stock || 0}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(item.stock || 0)}>
+                        {getStatusText(item.stock || 0)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -467,7 +556,7 @@ export default function AdminMenu({ menuItems, setMenuItems }) {
               )
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-gray-400">
+                <TableCell colSpan={7} className="text-center text-gray-400">
                   Tidak ada menu tersedia
                 </TableCell>
               </TableRow>

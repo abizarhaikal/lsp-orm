@@ -116,6 +116,24 @@ export async function POST(req) {
       },
     });
 
+    // decrease stock for each menu item
+    await Promise.all(
+      items.map(async ({ menu_item_id, quantity }) => {
+        const menuItem = await prisma.menuItem.update({
+          where: { id: menu_item_id },
+          data: {
+            stock: {
+              decrement: quantity,
+            },
+          },
+        });
+
+        if (menuItem.stock < 0) {
+          throw new Error(`Stok untuk menu item ${menuItem.name} tidak cukup`);
+        }
+      })
+    );
+
     // Tambahkan log aktivitas
     await prisma.activityLog.create({
       data: {

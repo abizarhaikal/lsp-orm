@@ -61,55 +61,62 @@ export async function GET(request, context) {
   }
 }
 
+// PUT update order
 export async function PUT(request, context) {
   const params = await context.params;
-  const order_id = params.order_id;
+  const order_id = params?.order_id;
+
   if (!order_id) {
     return NextResponse.json({ error: "Order ID diperlukan" }, { status: 400 });
   }
+
   try {
     const body = await request.json();
+    const { userId, status, paymentStatus, table_id } = body;
 
-    // Siapkan data update
+    // Siapkan data update untuk order
     const dataToUpdate = {};
-    if (body.status) dataToUpdate.status = body.status;
-    if (body.paymentStatus) dataToUpdate.paymentStatus = body.paymentStatus;
+    if (status) dataToUpdate.status = status;
+    if (paymentStatus) dataToUpdate.paymentStatus = paymentStatus;
 
-    // Update relasi meja sesuai body.table_id
-    if (body.table_id) {
-      dataToUpdate.table = { connect: { id: body.table_id } };
-    } else if (body.table_id === null) {
-      // Jika ingin disconnect meja (hapus relasi)
+    // Update meja jika ada table_id
+    if (table_id) {
+      dataToUpdate.table = { connect: { id: table_id } };
+    } else if (table_id === null) {
+      // Jika ingin menghapus hubungan meja (disconnect)
       dataToUpdate.table = { disconnect: true };
     }
 
-    const updated = await prisma.order.update({
+    const updatedOrder = await prisma.order.update({
       where: { id: order_id },
       data: dataToUpdate,
+      include: {
+        customer: { select: { name: true, email: true } },
+      },
     });
 
     // Insert activity log
-    const userId = getUserId(request);
-    let changed = [];
-    if (body.status) changed.push(`status: ${body.status}`);
-    if (body.paymentStatus)
-      changed.push(`paymentStatus: ${body.paymentStatus}`);
-    if (body.table_id) changed.push(`table: ${body.table_id}`);
+    const changed = [];
+    if (status) changed.push(`status: ${status}`);
+    if (paymentStatus) changed.push(`paymentStatus: ${paymentStatus}`);
+    if (table_id) changed.push(`table: ${table_id}`);
 
+    // Log activity menggunakan customer_id yang ada di body
     await prisma.activityLog.create({
       data: {
-        user_id: userId,
+        user_id: userId, // Ambil customer_id dari body request
         action: "update",
         target: "Order",
         target_id: order_id,
-        message: `Update order #${updated.order_number} [${changed.join(
+        message: `Update order #${updatedOrder.order_number} [${changed.join(
           ", "
         )}]`,
       },
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json(updatedOrder);
   } catch (err) {
+    console.error("[PUT /api/orders/:id] ERROR:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

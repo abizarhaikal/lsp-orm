@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,21 +26,24 @@ export default function KitchenDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [users, setUsers] = useState([]);
 
   useEffect(() => {
-    // Load orders saat komponen pertama kali dimount
-    const userStr = localStorage.getItem("user");
-    if (!userStr) {
-      window.location.href = "/login";
-      return;
+    if (typeof window !== "undefined") {
+      const currentUser = localStorage.getItem("user");
+      if (!currentUser) {
+        window.location.href = "/login";
+      } else {
+        setUsers([JSON.parse(currentUser)]);
+        const user = JSON.parse(currentUser);
+        if (user.role !== "kitchen") {
+          window.location.href = "/login";
+        } else {
+          loadOrders(); // Only call loadOrders once the user is validated
+        }
+      }
     }
-    const user = JSON.parse(userStr);
-    if (user.role !== "kitchen") {
-      window.location.href = "/login";
-      return;
-    }
-    loadOrders();
-  }, []);
+  }, []); // Empty dependency array so this runs only on mount
 
   async function loadOrders() {
     setLoading(true);
@@ -67,7 +70,7 @@ export default function KitchenDashboard() {
       const res = await fetch(`/api/order/${orderId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, userId: users[0].id }),
       });
       if (!res.ok) throw new Error("Gagal update status");
       await loadOrders();
