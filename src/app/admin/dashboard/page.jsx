@@ -6,6 +6,7 @@ import AdminReports from "@/components/ui/adminReports";
 import AdminTables from "@/components/ui/adminTables";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { redirect } from "next/dist/server/api-utils";
 import { useEffect, useState } from "react";
 
 export default function AdminDashboard() {
@@ -20,48 +21,7 @@ export default function AdminDashboard() {
   const [addMenuItem, setAddMenuItem] = useState(() => () => {});
   const [employees, setEmployees] = useState([]);
   const [addEmployee, setAddEmployee] = useState(() => () => {});
-  const [tables, setTables] = useState([
-    {
-      id: 1,
-      number: 1,
-      capacity: 4,
-      status: "Tersedia",
-      location: "Indoor",
-      qrCode: "QR001",
-    },
-    {
-      id: 2,
-      number: 2,
-      capacity: 2,
-      status: "Terisi",
-      location: "Indoor",
-      qrCode: "QR002",
-    },
-    {
-      id: 3,
-      number: 3,
-      capacity: 6,
-      status: "Reservasi",
-      location: "Outdoor",
-      qrCode: "QR003",
-    },
-    {
-      id: 4,
-      number: 4,
-      capacity: 4,
-      status: "Tersedia",
-      location: "Indoor",
-      qrCode: "QR004",
-    },
-    {
-      id: 5,
-      number: 5,
-      capacity: 8,
-      status: "Maintenance",
-      location: "Outdoor",
-      qrCode: "QR005",
-    },
-  ]);
+  const [tables, setTables] = useState([]);
 
   const [addTable, setAddTable] = useState(() => () => {});
   const [addIngredient, setAddIngredient] = useState(() => () => {});
@@ -71,6 +31,20 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [totalSales, setTotalSales] = useState(0);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const currentUser = localStorage.getItem("user");
+      if (!currentUser) {
+        window.location.href = "/login";
+      } else {
+        setUsers([JSON.parse(currentUser)]);
+        const user = JSON.parse(currentUser);
+        if (user.role !== "admin") {
+          window.location.href = "/login";
+        }
+      }
+    }
+  }, []); // Empty dependency array so this runs only on mount
   // fetch data user
   useEffect(() => {
     async function fetchUsers() {
